@@ -1,0 +1,474 @@
+__PLACEHOLDER__<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Farmashop — Modelo 3D conceptual del local</title>
+<style>
+:root{
+--tinta:#13233a; --papel:#eef2f6; --linea:#c6d2de;
+--azul:#0f5fa8; --celeste:#7fb3dc; --acento:#f2b705;
+--alta:#2e8b57; --media:#d98e04; --baja:#c44536;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;background:var(--papel);color:var(--tinta)}
+#escena{position:absolute;inset:0}
+header{
+position:absolute;top:0;left:0;right:0;z-index:10;pointer-events:none;
+padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+}
+h1{font-size:15px;letter-spacing:.04em;text-transform:uppercase;font-weight:700}
+h1 span{color:var(--azul)}
+.sub{font-size:11px;color:#5a6b7d;margin-top:2px;max-width:420px}
+.vistas{display:flex;gap:6px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
+.vistas button{
+border:1px solid var(--linea);background:#fff;color:var(--tinta);
+font-size:11px;padding:6px 10px;border-radius:4px;cursor:pointer;font-family:inherit;
+}
+.vistas button:hover{border-color:var(--azul);color:var(--azul)}
+.vistas button.activa{background:var(--azul);color:#fff;border-color:var(--azul)}
+.vistas button:focus-visible{outline:2px solid var(--acento);outline-offset:1px}
+#leyenda{
+position:absolute;left:14px;bottom:14px;z-index:10;background:#ffffffe8;border:1px solid var(--linea);
+border-radius:6px;padding:10px 12px;font-size:11px;max-width:230px;backdrop-filter:blur(3px);
+}
+#leyenda h2{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#5a6b7d;margin-bottom:6px}
+.item{display:flex;align-items:center;gap:7px;margin:3px 0;cursor:pointer;user-select:none}
+.item .sw{width:11px;height:11px;border-radius:2px;border:1px solid #0002;flex:none}
+.item.apagado{opacity:.35}
+#ficha{
+position:absolute;right:14px;bottom:14px;z-index:10;background:#ffffffee;border:1px solid var(--linea);
+border-radius:6px;padding:12px 14px;font-size:12px;width:322px;max-height:74vh;overflow-y:auto;display:none;backdrop-filter:blur(3px);
+}
+#ficha h3{font-size:13px;color:var(--azul);margin-bottom:4px}
+#ficha .dim{font-size:11px;color:#5a6b7d;margin-bottom:6px;font-variant-numeric:tabular-nums}
+#ficha p{line-height:1.45}
+#ficha .prod{margin-top:9px;padding-top:9px;border-top:1px solid var(--linea)}
+#ficha .prod .pt{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#8a96a4;margin-bottom:5px}
+#ficha .prod .row{font-size:11.5px;line-height:1.42;margin-bottom:5px}
+#ficha .prod .row b{color:var(--azul)}
+#ficha .prod .row .sos{color:#5a6b7d;font-variant-numeric:tabular-nums}
+.conf{display:inline-block;margin-top:7px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+padding:2px 7px;border-radius:10px;color:#fff}
+.conf.alta{background:var(--alta)} .conf.media{background:var(--media)} .conf.baja{background:var(--baja)}
+#ayuda{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:9;font-size:10.5px;color:#5a6b7d;
+background:#ffffffcc;padding:4px 12px;border-radius:12px;border:1px solid var(--linea);white-space:nowrap}
+@media (max-width:700px){
+.sub{display:none} #leyenda{max-width:160px;font-size:10px} #ficha{width:230px;font-size:11px} #ayuda{display:none}
+}
+</style>
+</head>
+<body>
+<div id="escena"></div>
+<header>
+<div>
+<h1>Farmashop · <span>Modelo 3D conceptual</span></h1>
+<div class="sub">Reconstrucción a partir de 11 fotos y 6 videos. Dimensiones estimadas en metros. <strong style="display:inline-block;margin-top:4px;font-size:14px;font-weight:700;color:var(--azul);background:#e8f0fb;border:1px solid #b9d3f0;border-radius:6px;padding:3px 9px;">Tocá un elemento (góndola, mostrador, etc.) para ver la descripción de productos</strong></div>
+</div>
+<nav class="vistas" aria-label="Vistas predefinidas">
+<button data-v="persp" class="activa">Perspectiva</button>
+<button data-v="fachada">Fachada</button>
+<button data-v="planta">Planta</button>
+<button data-v="entrada">Desde la entrada</button>
+<button data-v="farmacia">Hacia la farmacia</button>
+<button data-v="corte">Corte lateral</button>
+</nav>
+</header>
+<div id="leyenda"><h2>Capas</h2></div>
+<div id="ficha" role="dialog" aria-live="polite"></div>
+<div id="ayuda">Arrastrar: orbitar · Rueda / pellizco: zoom · Doble clic: recentrar</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============ DATOS DEL MODELO ============
+   Coordenadas en metros. x: 0 (pared izq) → 6 (pared der)
+   y: 0 (fachada) → 14 (fondo) · z: altura desde el piso.
+   Cada caja: [x, y, ancho, prof, zBase, alto]                     */
+const CAT = {
+  estructura:{n:"Estructura / fachada", c:0xb9c6d2},
+  circulacion:{n:"Circulación", c:0xe7d9a8},
+  gondola:{n:"Góndola central (ancha)", c:0x0f5fa8},
+  pared:{n:"Mostradores y repisas de pared", c:0x6fa8d0},
+  entrada:{n:"Equipamiento zona entrada", c:0x8e7cc3},
+  caja:{n:"Zona de cajas", c:0xf2b705},
+  farmacia:{n:"Sector farmacia", c:0xc44536},
+};
+const EL = [
+// ---- estructura
+ {id:"piso", cat:"estructura", caja:[0,0,6,14,-0.06,0.06], nombre:"Piso del salón",
+  desc:"Baldosa granítica beige (~40 cm). Planta rectangular angosta y profunda: ≈6 m de ancho por ≈14 m de fondo.", conf:"media", fijo:true},
+ {id:"pared_izq", cat:"estructura", caja:[-0.08,0,0.08,14,0,2.8], nombre:"Pared izquierda", desc:"Muro lleno con espejo y repisas de vidrio en la zona de venta.", conf:"alta", fijo:true},
+ {id:"pared_der", cat:"estructura", caja:[6,0,0.08,14,0,2.8], nombre:"Pared derecha", desc:"Muro lleno con espejo y repisas de vidrio; panel de ganchos junto a la entrada.", conf:"alta", fijo:true},
+ {id:"pared_fondo", cat:"estructura", caja:[0,14,6,0.08,0,2.8], nombre:"Pared de fondo", desc:"Cierra el sector farmacia; cajoneras y estanterías adosadas.", conf:"alta", fijo:true},
+ {id:"vidriera", cat:"estructura", caja:[0,-0.06,4.1,0.06,0.55,1.95], nombre:"Vidriera a la calle", vidrio:true,
+  desc:"Frente vidriado sobre murete bajo, con marco oscuro. Local entre medianeras sobre la vereda (foto de fachada); pizarra promocional y cartel Santander en el exterior.", conf:"alta"},
+ {id:"murete", cat:"estructura", caja:[0,-0.08,4.1,0.14,0,0.55], nombre:"Murete bajo la vidriera",
+  desc:"Antepecho blanco de ~0,55 m sobre el que apoya la vidriera; del lado interior tiene una reja-baranda baja (foto de fachada).", conf:"alta"},
+ {id:"puerta", cat:"estructura", caja:[4.2,-0.35,1.3,0.4,0,0.02], nombre:"Entrada principal",
+  desc:"Acceso retranqueado sobre el lado derecho del frente, con puerta vidriada abierta hacia adentro y paño lateral con afiche Súper Jueves (foto de fachada). El cartel SALIDA y las cestas (foto 1) quedan inmediatamente a la derecha al entrar.", conf:"alta"},
+ {id:"cenefa", cat:"estructura", caja:[0,12.85,6,0.18,2.3,0.28], nombre:"Cenefa / dintel del sector farmacia",
+  desc:"Viga con tira LED que cruza todo el ancho y marca el umbral del sector farmacia (fotos 8 y 10). Cámaras domo en el cielorraso contiguo.", conf:"alta"},
+
+// ---- zona entrada
+ {id:"heladera", cat:"entrada", caja:[0.08,0.65,0.72,0.78,0,1.95], nombre:"Heladera de bebidas",
+  prod:`<div class="row"><b>Bebidas</b> — refrescos en botella (cola, naranja, lima-limón) y aguas. Exhibidora vertical refrigerada con cartel BEBIDAS.</div>`,
+  desc:"Exhibidora vertical refrigerada con cartel BEBIDAS, contra la pared izquierda junto al frente (foto 3).", conf:"alta"},
+ {id:"mesa_papel", cat:"entrada", caja:[1.5,0.2,0.85,0.8,0,0.78], nombre:"Mesa promocional de papelería",
+  prod:`<div class="row"><b>Papelería / tissue</b> — papel higiénico Elite, papel y toalla Higienol, rollos de cocina Nova; pilas adicionales de papel y servilletas. Islote exhibido hacia la calle.</div>`,
+  desc:"Islote bajo blanco con pilas de papel higiénico y rollos (Elite, Higienol, Nova), casi pegado a la vidriera sobre el lado izquierdo, exhibido hacia la calle (fotos 3 y de fachada).", conf:"alta"},
+ {id:"panel_acc", cat:"entrada", caja:[5.42,0.4,0.52,2.05,0,2.1], nombre:"Panel de accesorios (entrada)",
+  prod:`<div class="row"><b>Manicura</b> — sets, cortauñas y kits Nail Mate; limas y tijeras.</div><div class="row"><b>Accesorios de pelo</b> — scrunchies, hebillas, vinchas; cepillos y peines.</div><div class="row"><b>Tocador</b> — esponjas y bandas faciales de toilette. Cestas de compra plásticas azules apiladas al pie.</div>`,
+  desc:"Base escalonada + panel perforado con ganchos: accesorios de pelo, manicura, esponjas. Cartel SALIDA arriba (~2,2 m). Foto 1 y video 2.", conf:"alta"},
+ {id:"cestas", cat:"entrada", caja:[5.05,2.5,0.45,0.55,0,0.55], nombre:"Cestas de compra",
+  desc:"Pila de cestas plásticas azules al pie del panel de accesorios (foto 1).", conf:"alta"},
+
+// ---- perímetro izquierdo
+ {id:"most_izq", cat:"pared", caja:[0.08,2.1,0.58,8.9,0,0.95], nombre:"Mostrador-vitrina izquierdo",
+  prod:`<div class="row"><b>Inicio</b> — toallitas húmedas (baby wipes) y pañales.</div><div class="row"><b>Protección femenina</b> (tramo medio) — Kotex con promo 4x3 dominante <span class="sos">~45%</span>, Ladysoft, Nosotras, OB. Nivel piso: baja visibilidad pese a la promo fuerte.</div><div class="row"><b>Limpieza / bazar</b> (fondo) — lavandina Tabusol, Skip/Nevex, Cif, limpiadores y desinfectantes, Drauma/Poett.</div>`,
+  desc:"Mueble corrido antiguo de madera pintada blanca con cajones y tapa de vidrio oscuro. Estantes abiertos inferiores: toallitas húmedas y pañales al inicio, protección femenina (Kotex, Ladysoft) en el tramo medio y limpieza/bazar hacia el fondo (video 6).", conf:"alta"},
+ {id:"rep_izq", cat:"pared", caja:[0.08,2.1,0.3,8.9,1.2,0.85], nombre:"Repisas de vidrio — pared izquierda",
+  prod:`<div class="row"><b>Bebé / infantil</b> (inicio) — Johnson's baby, talco y colonia infantil.</div><div class="row"><b>Perfumería y colonias</b> (tramo medio) — UDV/Ulric de Varens, Desire, Urban Care, Legacy (red/blue), VIP, Tulipán Negro, Agua de Mar; infantiles licenciadas Paco (Spiderman), set Frozen II, Disney/Barbie. Vitrina con vidrio: alta percepción de valor, baja interacción.</div><div class="row"><b>Cremas y dermo</b> — Nivea, Cicatricure, Hipoglós/Desitin, Dermaglós.</div><div class="row"><b>Esmaltes y maquillaje</b> (cerca de farmacia) — esmaltes en exhibidor, top maquillaje, kits "Skin".</div>`,
+  desc:"Repisas vidriadas con espejo de fondo sobre el mostrador (1,2–2,05 m). Secuencia entrada→fondo: línea bebé/infantil (Johnson's), perfumería y colonias (UDV, Frozen, Paco), cremas corporales (Nivea, Cicatricure) y esmaltes/maquillaje cerca de la farmacia (video 5).", conf:"alta"},
+
+// ---- perímetro derecho
+ {id:"most_der", cat:"pared", caja:[5.36,2.6,0.58,8.6,0,0.95], nombre:"Mostrador-vitrina derecho",
+  prod:`<div class="row"><b>Fijadores y styling</b> (estantes bajos) — sprays, espumas, serums y aceites capilares.</div><div class="row"><b>Coloración</b> — Koleston (Wella), Garnier Nutrisse, L'Oréal Casting Crème Gloss, Issue, Soft Color. Por debajo de 60 cm: acceso débil, requiere agacharse.</div><div class="row"><b>Depilación / dermo</b> — ceras, cremas depilatorias Veet, Depilart, Calypso; tinturas y oxidantes profesionales.</div><div class="row"><b>Tapa</b> (junto a la entrada) — terminal POS auxiliar, exhibidores de impulso y display Súper Jueves.</div>`,
+  desc:"Mismo mueble corrido blanco con tapa de vidrio oscuro. Estantes inferiores: fijadores y serums capilares, coloración (Koleston, Nutrisse, Casting) y depilación/dermo (video 3). Sobre la tapa, exhibidores y un terminal POS auxiliar cerca de la entrada (foto 1).", conf:"alta"},
+ {id:"rep_der", cat:"pared", caja:[5.64,2.6,0.3,8.6,1.2,0.85], nombre:"Repisas de vidrio — pared derecha",
+  prod:`<div class="row"><b>Puericultura</b> (inicio) — NUK (mamaderas, chupetes, accesorios).</div><div class="row"><b>Piel y cicatrizantes</b> — Cicatricure, Asepxia, Nivea Q10/Cellular.</div><div class="row"><b>Dermocosmética</b> (antesala de farmacia) — CeraVe, Cetaphil, Vichy, La Roche-Posay (carteles 50%), Bagóvit, Eucerin. Bloque premium <span class="sos">~60% del tramo</span>, compra asistida.</div><div class="row"><b>Sets de regalo</b> — "Felicidad para tus sentidos", Re Bella, Classic.</div>`,
+  desc:"Repisas vidriadas con espejo (la filmadora se refleja en el video 2). Secuencia: puericultura NUK, Cicatricure/Asepxia, Nivea Q10, y dermocosmética (Bagóvit, CeraVe, Cetaphil, Vichy, La Roche) llegando a la farmacia.", conf:"alta"},
+
+// ---- góndola central
+ {id:"cab_ent", cat:"gondola", caja:[2.42,2.5,1.12,0.85,0,1.62], nombre:"Cabecera lado entrada (escalonada)",
+  prod:`<div class="row"><b>Tope</b> — shampoo Canarias "rubio" con promo 50%.</div><div class="row"><b>Cuidado</b> — XanaPie (crema de pies), Kiwanis (antibacterial corporal), Johnson's (óleo calcáreo, baby).</div><div class="row"><b>Coloración y antiséptico</b> — tinte Soft Color, tinte Koleston, antiséptico/clorhexidina.</div><div class="row"><b>Base</b> — algodón (Pampero/Estrella), pañuelos Elite, agua mineral, gift sets "Amanecer Zen" y "Classic". Primer hot spot: intercepta el 100% del tráfico.</div>`,
+  esc:true, desc:"Cabecera piramidal de 4 niveles: gift sets y jabones abajo; algodón, Elite y agua; coloración (Soft Color, Koleston) y antisépticos; XanaPie, Kiwanis y línea Johnson's arriba, coronada por shampoos Canarias “rubio 50%” (fotos 2, 5 y 11).", conf:"alta"},
+ {id:"gondola", cat:"gondola", caja:[2.42,3.35,1.12,6.2,0,1.62], nombre:"Góndola central ancha (doble faz)",
+  prod:`<div class="row" style="color:#8a96a4;font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Cara derecha</div><div class="row"><b>Capilar</b> (1er tramo) — L'Oréal Elvive <span class="sos">~25%</span>, Pantene <span class="sos">~20%</span>, Dove <span class="sos">~12%</span>, Tío Nacho (Control Caspa, Herbolaria), Sedal, Garnier Fructis; premium en estuches dorados (tope). Ojo/mano, autoservicio.</div><div class="row"><b>Desodorantes</b> (2º tramo) — Rexona/Rexona Clinical (bloque dominante <span class="sos">~35%</span>), Dove, Axe, Nike, Speed Stick, Nivea.</div><div class="row"><b>Afeitado</b> (cierre) — Gillette (máquinas y repuestos, <span class="sos">&gt;70%</span>), espumas y geles. Bic marginal.</div><div class="row" style="color:#8a96a4;font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin:6px 0 2px">Cara izquierda</div><div class="row"><b>Higiene bucal</b> (1er tramo) — Colgate (cremas y cepillos <span class="sos">~35%</span>), Oral-B, Listerine (enjuagues <span class="sos">~50%</span>, cenefa propia), GUM (medallón POP), Bio dent/CFX, Pondent/Periogard, hilo dental.</div><div class="row"><b>Jabones y baño</b> (2º tramo) — Dove, Protex, Lactovit, babaria, Nivea body; esponjas SPONGE colgadas en el tope, jabones de glicerina y barras económicas.</div>`,
+  desc:"Única góndola central, de ~1,1 m de ancho y ~6 m de largo, 5–6 niveles (~1,6 m). Cara derecha: capilar (Elvive, Pantene, Dove, Tío Nacho) → desodorantes (Rexona, Axe) → afeitado Gillette (video 1). Cara izquierda: higiene bucal (cepillos, Listerine) → jabones y gel de baño con ganchos de esponjas en el tope (video 4). Foto 11 confirma su tope continuo con ganchos vista desde arriba.", conf:"alta"},
+ {id:"cab_far", cat:"gondola", caja:[2.42,9.55,1.12,0.8,0,1.85], nombre:"Cabecera lado farmacia (solares)",
+  prod:`<div class="row"><b>Protección solar</b> — Umbrella FPS 50/50+ (bloque superior) <span class="sos">~30%</span>, Dermaglós Solar 40/50, Bagóvit Solar 30, L'Oréal UV Defender, L'Oréal Sublime Bronze (autobronceante), bealm, Dermur Solar.</div><div class="row"><b>Repelentes</b> — OFF! (Family/Active, niveles bajos) y aerosoles genéricos. Bien armada pero contraestacional en junio.</div>`,
+  desc:"Cabecera alta con protectores solares (Umbrella, Dermaglós, Bagóvit, L'Oréal UV Defender) y repelentes OFF en los niveles bajos (foto 7).", conf:"alta"},
+
+// ---- circulación
+ {id:"pas_izq", cat:"circulacion", caja:[0.7,2.1,1.68,8.4,-0.045,0.05], nombre:"Pasillo izquierdo",
+  desc:"Corredor de ~1,5–1,7 m libres entre el mostrador izquierdo y la cara de higiene bucal/baño de la góndola. Conecta entrada → farmacia.", conf:"alta"},
+ {id:"pas_der", cat:"circulacion", caja:[3.58,2.1,1.74,8.4,-0.045,0.05], nombre:"Pasillo derecho",
+  desc:"Corredor de ~1,6–1,8 m libres entre la góndola (capilar/desodorantes) y la vitrina de dermocosmética. Es el eje visual entrada→caja de la foto 2.", conf:"alta"},
+ {id:"cruce", cat:"circulacion", caja:[0.7,10.5,4.62,0.95,-0.045,0.05], nombre:"Cruce transversal frente a la caja",
+  desc:"Zona despejada donde desembocan ambos pasillos, delante del mostrador de cobro (validada por foto 11: la góndola termina ~1 m antes de la caja).", conf:"alta"},
+ {id:"zona_ent", cat:"circulacion", caja:[0.7,0.35,4.6,1.6,-0.045,0.05], nombre:"Playa de entrada",
+  desc:"Espacio de acceso entre la vidriera, la heladera, la mesa de papel y la cabecera escalonada.", conf:"media"},
+
+// ---- caja
+ {id:"caja", cat:"caja", caja:[2.0,11.45,2.7,0.7,0,0.95], nombre:"Mostrador de caja",
+  prod:`<div class="row"><b>OTC de impulso</b> (tapa) — Perifar "Rápida" (display de cartón), ACF C, Ibupirac Flex 600, Dolex/Paracetamol, Fabogesic; caramelos a granel Arcor (bowl), exhibidor Minnie Mouse (Disney), pack Elite lateral.</div><div class="row"><b>Golosinas</b> (frente, 5 niveles) — chicles Beldent, Halls, Mentitas/Media Hora, chocolates Milka/Cadbury/Shot/Bon o Bon (Arcor), Skittles/Sugus, confites surtidos. Checkout de manual, densidad máxima.</div>`,
+  desc:"Módulo central de cobro con dos terminales POS/lector, exhibidores OTC sobre la tapa (Perifar, ACF, Ibupirac, Dolex) y frente de 5 niveles con golosinas y chicles (foto 4). Pasos laterales a ambos lados hacia el sector interno.", conf:"alta"},
+
+// ---- farmacia
+ {id:"cajoneras", cat:"farmacia", caja:[1.1,13.45,3.4,0.5,0,2.05], nombre:"Cajoneras de farmacia",
+  prod:`<div class="row"><b>Dispensación</b> — cajoneras de medicamentos detrás de la caja.</div><div class="row"><b>OTC adosado</b> — exhibidores de Fabogesic, Dolex, Ibupirac Flex; cartel de horarios/recetas y "A los usuarios".</div>`,
+  desc:"Frente de cajoneras blancas modulares (~2 m) detrás de la caja, con exhibidores de OTC adosados (Fabogesic, Dolex, Ibupirac) y cartel de horarios/recetas (fotos 4 y 8).", conf:"alta"},
+ {id:"stock", cat:"farmacia", caja:[1.1,13.5,3.4,0.45,2.05,0.6], nombre:"Stock elevado de pañales",
+  prod:`<div class="row"><b>Pañales (stock elevado)</b> — Pampers (Confort Sec), Babysec (Premium), Huggies, apilados sobre las cajoneras hasta casi el cielorraso.</div>`,
+  desc:"Pampers, Babysec y Huggies apilados sobre las cajoneras hasta casi el cielorraso (foto 8).", conf:"alta"},
+ {id:"est_izq_far", cat:"farmacia", caja:[0.08,11.7,0.55,2.2,0,2.35], nombre:"Estantería interna izquierda",
+  prod:`<div class="row"><b>Afeitado (refuerzo)</b> — Gillette, Venus, Bic; Band-Aid/Curitas.</div><div class="row"><b>Nutrición infantil y clínica</b> — Nutrilon, Ensure, Glucerna, Nutren; colágeno HA y suplementos.</div><div class="row"><b>Electro de belleza</b> — GA.MA (planchas, secadores, depiladoras), Oasis Look styling.</div><div class="row"><b>Adulto</b> — pañales Cotidian/Plenitud, Indasec. Vitrina negra con promo "Todos los días 10% dto" (Santander).</div>`,
+  desc:"Rincón izquierdo del sector: afeitado Gillette, leches infantiles (Nutrilon) y suplementos (Ensure), electro de belleza GA.MA, pañales de adulto arriba; vitrina negra con promo 10% y equipo de registración (foto 9).", conf:"alta"},
+ {id:"armario_dt", cat:"farmacia", caja:[4.45,13.4,0.62,0.55,0,2.1], nombre:"Armario Dirección Técnica",
+  desc:"Armario alto blanco con cartelería de Dirección Técnica (Q.F.) y aviso a los usuarios (foto 10).", conf:"alta"},
+ {id:"est_der_far", cat:"farmacia", caja:[5.35,12.35,0.58,1.6,0.85,1.4], nombre:"Estantes de equipamiento médico",
+  prod:`<div class="row"><b>Medición</b> — tensiómetros Omron; glucómetros Accu-Chek (Guide, Active, Solo), sistema CGM, VivaChek; termómetros y tiras reactivas Flopptest.</div><div class="row"><b>Respiratorio y primeros auxilios</b> — nebulizadores y aspiradores Silfab, botiquines.</div><div class="row"><b>Lactancia</b> — bombas de extracción y accesorios. Compra asistida / destino; stock Huggies apilado encima.</div>`,
+  desc:"Nicho derecho con repisas blancas: tensiómetros Omron, glucómetros Accu-Chek/CGM, nebulizadores Silfab, botiquines; stock Huggies apilado encima (fotos 8 y 10). Cámaras Hikvision en el techo de este sector.", conf:"alta"},
+];
+
+/* ============ ESCENA ============ */
+const cont = document.getElementById("escena");
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+cont.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xeef2f6);
+scene.fog = new THREE.Fog(0xeef2f6, 30, 70);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 200);
+const CENTRO = new THREE.Vector3(3,1.1,7); // x, alto, profundidad
+
+// luces
+scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d4dd, 0.95));
+const sol = new THREE.DirectionalLight(0xfff4e0, 0.7);
+sol.position.set(-8,14,-6); scene.add(sol);
+const sol2 = new THREE.DirectionalLight(0xdfeaff, 0.35);
+sol2.position.set(10,8,18); scene.add(sol2);
+
+// grilla de referencia (1 m)
+const grid = new THREE.GridHelper(40, 40, 0xc6d2de, 0xdde5ec);
+grid.position.set(3,-0.07,7); scene.add(grid);
+
+// construcción de cajas — three: x→x, y→altura, z→profundidad
+const grupoTodo = new THREE.Group(); scene.add(grupoTodo);
+const seleccionables = [];
+const ANCHO = 6; // espejado del render: x lógico (desde pared izq.) → escena, para que
+const MX = (x,w)=> ANCHO-(x+w); // quien mira desde la entrada vea la puerta a su derecha
+function mkCaja(el){
+let [x,y,w,d,zb,h] = el.caja;
+  x = MX(x,w);
+const g = new THREE.Group();
+const colorCat = CAT[el.cat].c;
+if (el.esc){ // cabecera escalonada: 4 escalones
+const niveles=[[0,0.85,0.55],[0.18,0.67,0.95],[0.36,0.49,1.3],[0.54,0.31,1.62]];
+    niveles.forEach(([off,prof,alto])=>{
+const m=new THREE.Mesh(new THREE.BoxGeometry(w,alto,prof),
+new THREE.MeshLambertMaterial({color:colorCat}));
+      m.position.set(x+w/2, zb+alto/2, y+off+prof/2);
+      g.add(m);
+    });
+  } else {
+const mat = el.vidrio
+      ? new THREE.MeshLambertMaterial({color:0x9fc3dd, transparent:true, opacity:0.32})
+      : new THREE.MeshLambertMaterial({color:colorCat,
+          transparent: el.cat==="circulacion", opacity: el.cat==="circulacion"?0.55:1});
+const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+    m.position.set(x+w/2, zb+h/2, y+d/2);
+    g.add(m);
+  }
+// aristas
+  g.children.forEach(m=>{
+const e=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),
+new THREE.LineBasicMaterial({color:0x13233a, transparent:true, opacity:0.28}));
+    e.position.copy(m.position); g.add(e);
+  });
+  g.userData = el;
+  g.traverse(o=>{ if(o.isMesh){ o.userData.ref = el; seleccionables.push(o);} });
+return g;
+}
+const grupos = {};
+EL.forEach(el=>{
+const g = mkCaja(el);
+  grupoTodo.add(g);
+  (grupos[el.cat] = grupos[el.cat]||[]).push(g);
+});
+
+/* ============ FACHADA DETALLADA (según foto) ============
+   Construida directamente en coordenadas de escena (ya espejadas):
+   la puerta queda en x de escena 0,5–1,8 y la vidriera en 1,9–6,0,
+   de modo que vista desde la calle la puerta aparece a la derecha. */
+const FICHA_FACHADA = {nombre:"Fachada Farmashop 111", cat:"estructura", conf:"alta",
+  caja:[0,-0.5,6,0.5,0,3.1],
+  desc:"Reproducción aproximada de la foto de fachada: marquesina azul inclinada con logo Farmashop y número 111, vidriera sobre murete con baranda interior, acceso retranqueado con puerta vidriada abierta, afiche Súper Jueves y sticker Comercio Solidario en el vidrio, pilar con bajada pluvial, vereda con alfombra de acceso y pizarra Santander."};
+const fach = new THREE.Group();
+const M = c=>new THREE.MeshLambertMaterial({color:c});
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();g.fill();}
+function tex(w,h,fn){const c=document.createElement("canvas");c.width=w;c.height=h;fn(c.getContext("2d"));const t=new THREE.CanvasTexture(c);t.anisotropy=8;return t;}
+function add(mesh,x,y,z,rx){mesh.position.set(x,y,z);if(rx)mesh.rotation.x=rx;fach.add(mesh);return mesh;}
+const B=(w,h,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+const mNeg=M(0x2a2d31), mAzul=M(0x1d4e9e);
+
+// --- marquesina azul con logo y "111"
+const texMarq = tex(1100,190,g=>{
+const gr=g.createLinearGradient(0,0,0,190);gr.addColorStop(0,"#2a62b8");gr.addColorStop(1,"#16407f");
+  g.fillStyle=gr;g.fillRect(0,0,1100,190);
+  g.save();g.translate(320,95);
+  g.fillStyle="#10316b";g.beginPath();g.arc(-24,8,48,0,7);g.fill();
+  g.fillStyle="#f7c600";rr(g,-24,-66,48,132,14);rr(g,-66,-24,132,48,14);
+  g.fillStyle="#16407f";g.beginPath();g.arc(-12,-14,6,0,7);g.fill();g.beginPath();g.arc(16,-14,6,0,7);g.fill();
+  g.strokeStyle="#16407f";g.lineWidth=7;g.lineCap="round";g.beginPath();g.arc(2,0,22,0.3,Math.PI-0.3);g.stroke();
+  g.restore();
+  g.fillStyle="#fff";g.textBaseline="middle";
+  g.font="700 92px 'Segoe UI',Arial,sans-serif";g.fillText("farmashop",405,100);
+  g.font="700 26px Arial";g.fillText("\u00ae",868,70);
+  g.font="700 78px Arial";g.fillText("111",950,100);
+});
+add(new THREE.Mesh(new THREE.BoxGeometry(6.4,0.62,0.45),
+  [mAzul,mAzul,M(0xdde4ec),mAzul,mAzul,new THREE.MeshLambertMaterial({map:texMarq})]),3,2.52,-0.27,-0.15);
+add(B(6.6,0.45,0.25,M(0xe9edf0)),3,2.98,-0.08);          // banda blanca superior
+add(B(6.4,0.16,0.34,M(0xeef1f3)),3,2.17,-0.1);           // filo blanco bajo la marquesina
+add(B(7,1.25,0.15,M(0xcfd3d6)),3,3.78,0.06);             // edificio del piso superior
+add(B(6.7,0.95,0.1,M(0xb3a17f)),3,3.82,-0.04);           // tamiz de cañas del balcón
+add(B(6.9,0.16,0.55,M(0xd9dde0)),3,3.22,-0.2);           // losa del balcón
+add(B(0.55,0.42,0.3,M(0xc7ccd0)),0.62,3.62,-0.28);       // equipo de aire acondicionado
+
+// --- marcos oscuros de la vidriera + baranda interior
+add(B(4.2,0.16,0.1,mNeg),3.95,2.12,-0.02);
+add(B(4.2,0.1,0.1,mNeg),3.95,0.58,-0.02);
+add(B(0.1,1.72,0.1,mNeg),1.93,1.35,-0.02);
+add(B(0.1,1.72,0.1,mNeg),5.97,1.35,-0.02);
+add(B(3.85,0.05,0.05,M(0x1f2326)),3.95,0.69,0.18);
+for(let i=0;i<6;i++) add(B(0.04,0.15,0.04,M(0x1f2326)),2.25+i*0.7,0.61,0.18);
+
+// --- retranqueo de la puerta (hoja abierta hacia adentro)
+add(B(0.06,2.2,0.42,M(0xeef1f3)),0.49,1.1,-0.21);
+add(B(0.06,2.2,0.42,M(0xeef1f3)),1.81,1.1,-0.21);
+add(B(1.38,0.26,0.42,M(0xeef1f3)),1.15,2.16,-0.21);
+add(B(1.32,0.03,0.44,M(0x8e9396)),1.15,0.015,-0.21);
+add(B(0.07,2.06,0.07,mNeg),0.53,1.05,-0.04);
+add(B(0.07,2.06,0.07,mNeg),1.77,1.05,-0.04);
+add(new THREE.Mesh(new THREE.BoxGeometry(0.05,2.0,0.82),
+new THREE.MeshLambertMaterial({color:0x394048,transparent:true,opacity:0.55})),1.74,1.03,0.44);
+
+// --- afiche Súper Jueves y sticker Comercio Solidario sobre el vidrio
+const texSJ = tex(220,340,g=>{
+const gr=g.createLinearGradient(0,0,0,340);gr.addColorStop(0,"#1f6ec2");gr.addColorStop(1,"#0d3f8c");
+  g.fillStyle=gr;g.fillRect(0,0,220,340);
+  g.fillStyle="#ffd400";g.font="700 26px Arial";g.textAlign="center";g.fillText("S\u00daPER JUEVES",110,46);
+  g.fillStyle="#fff";g.font="800 64px Arial";g.fillText("25%",110,120);
+  g.font="400 15px Arial";g.fillText("en perfumer\u00eda con",110,150);g.fillText("Farmacard",110,168);
+  g.font="800 50px Arial";g.fillText("15%",110,225);
+  g.font="400 14px Arial";g.fillText("pagando con tarjetas",110,252);
+  g.strokeStyle="#fff";g.lineWidth=4;g.strokeRect(78,272,64,52);
+  g.beginPath();g.arc(110,272,18,Math.PI,0);g.stroke();
+});
+add(new THREE.Mesh(new THREE.BoxGeometry(0.52,0.82,0.02),
+  [mNeg,mNeg,mNeg,mNeg,mNeg,new THREE.MeshLambertMaterial({map:texSJ})]),2.28,1.4,0.03);
+const texCS = tex(140,170,g=>{
+  g.fillStyle="#fff";rr(g,4,4,132,162,14);
+  g.fillStyle="#2f7fc1";g.font="700 20px Arial";g.textAlign="center";
+  g.fillText("Comercio",70,78);g.fillText("Solidario",70,102);
+  g.strokeStyle="#2f7fc1";g.lineWidth=3;g.beginPath();g.arc(70,40,16,0,7);g.stroke();
+});
+add(new THREE.Mesh(new THREE.BoxGeometry(0.26,0.32,0.015),
+  [mNeg,mNeg,mNeg,mNeg,mNeg,new THREE.MeshLambertMaterial({map:texCS})]),2.16,0.88,0.03);
+
+// --- pilares, bajada pluvial, vereda y alfombra
+add(B(0.55,2.2,0.14,M(0xe6eaed)),0.2,1.1,-0.07);
+add(B(0.4,2.2,0.14,M(0xe6eaed)),6.22,1.1,-0.07);
+add(new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,2.2,10),M(0x9aa0a4)),0.1,1.1,-0.17);
+add(B(10,0.04,3.4,M(0xa7abae)),3,-0.05,-1.7);
+add(B(8,0.05,0.75,M(0x888d91)),3,-0.04,-0.37);
+add(B(1.5,0.06,1.5,M(0x565b60)),1.15,-0.03,-0.85);
+
+// --- pizarra Santander en la vereda
+const texPiz = tex(200,360,g=>{
+  g.fillStyle="#f4f4f2";g.fillRect(0,0,200,360);
+  g.fillStyle="#ec0000";g.font="700 22px Arial";g.textAlign="center";g.fillText("Santander",100,40);
+  g.fillStyle="#13233a";g.font="700 16px Arial";g.fillText("farmashop",100,66);
+  g.fillStyle="#c8102e";g.beginPath();g.moveTo(0,90);g.lineTo(200,120);g.lineTo(200,360);g.lineTo(0,360);g.closePath();g.fill();
+  g.fillStyle="#fff";g.font="800 56px Arial";g.fillText("25%",100,185);
+  g.font="400 13px Arial";g.fillText("martes, jueves y domingos",100,212);
+  g.font="800 44px Arial";g.fillText("10%",100,280);
+  g.font="400 13px Arial";g.fillText("todos los d\u00edas",100,305);
+});
+const piz1=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.92,0.025),
+  [mNeg,mNeg,mNeg,mNeg,mNeg,new THREE.MeshLambertMaterial({map:texPiz})]);
+piz1.position.set(5.15,0.46,-1.52);piz1.rotation.x=-0.2;fach.add(piz1);
+const piz2=B(0.55,0.92,0.025,M(0xdadcdd));piz2.position.set(5.15,0.46,-1.3);piz2.rotation.x=0.2;fach.add(piz2);
+
+fach.traverse(o=>{if(o.isMesh){o.userData.ref=FICHA_FACHADA;seleccionables.push(o);}});
+grupoTodo.add(fach);
+(grupos["estructura"]=grupos["estructura"]||[]).push(fach);
+
+/* ============ CONTROLES DE ÓRBITA MANUALES ============ */
+let theta = -1.68, phi = 1.18, radio = 12.5, objetivo = new THREE.Vector3(3,1.3,4.5);
+function aplicarCam(){
+  phi = Math.max(0.08, Math.min(Math.PI/2-0.02, phi));
+  radio = Math.max(4, Math.min(45, radio));
+  camera.position.set(
+    objetivo.x + radio*Math.sin(phi)*Math.cos(theta),
+    objetivo.y + radio*Math.cos(phi),
+    objetivo.z + radio*Math.sin(phi)*Math.sin(theta));
+  camera.lookAt(objetivo);
+}
+aplicarCam();
+let arrastrando=false, px=0, pyy=0, movido=false;
+const dom = renderer.domElement;
+dom.addEventListener("pointerdown", e=>{arrastrando=true;movido=false;px=e.clientX;pyy=e.clientY;dom.setPointerCapture(e.pointerId);});
+dom.addEventListener("pointermove", e=>{
+if(!arrastrando) return;
+const dx=e.clientX-px, dy=e.clientY-pyy;
+if(Math.abs(dx)+Math.abs(dy)>3) movido=true;
+  theta += dx*0.006; phi -= dy*0.005;
+  px=e.clientX; pyy=e.clientY; marcarBoton(null); aplicarCam();
+});
+dom.addEventListener("pointerup", ()=>arrastrando=false);
+dom.addEventListener("wheel", e=>{e.preventDefault(); radio *= (1 + Math.sign(e.deltaY)*0.09); aplicarCam();},{passive:false});
+// pellizco táctil
+let pinchD=null;
+dom.addEventListener("touchmove", e=>{
+if(e.touches.length===2){
+const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+if(pinchD) {radio *= pinchD/d; aplicarCam();}
+    pinchD=d;
+  }
+},{passive:true});
+dom.addEventListener("touchend", ()=>pinchD=null);
+dom.addEventListener("dblclick", ()=>{objetivo.copy(CENTRO); aplicarCam();});
+
+/* vistas predefinidas */
+const VISTAS = {
+  persp:{t:-1.68, p:1.18, r:12.5, o:new THREE.Vector3(3,1.3,4.5)},
+  fachada:{t:-1.571, p:1.35, r:9, o:new THREE.Vector3(3,1.5,1)},
+  planta:{t:-Math.PI/2, p:0.09, r:17, o:CENTRO},
+  entrada:{t:-1.62, p:1.30, r:11.5, o:new THREE.Vector3(3,1.2,6.5)},
+  farmacia:{t:1.55, p:1.25, r:9.5, o:new THREE.Vector3(3,1.3,9)},
+  corte:{t:Math.PI, p:1.25, r:14, o:new THREE.Vector3(3,1.2,7)},
+};
+function marcarBoton(v){
+  document.querySelectorAll(".vistas button").forEach(b=>b.classList.toggle("activa", b.dataset.v===v));
+}
+document.querySelectorAll(".vistas button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+const v=VISTAS[b.dataset.v];
+const t0={t:theta,p:phi,r:radio,ox:objetivo.x,oy:objetivo.y,oz:objetivo.z};
+const t1={t:v.t,p:v.p,r:v.r,ox:v.o.x,oy:v.o.y,oz:v.o.z};
+const ini=performance.now(), dur=matchMedia("(prefers-reduced-motion: reduce)").matches?0:600;
+    (function anim(now){
+const k=dur?Math.min(1,(now-ini)/dur):1, e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      theta=t0.t+(t1.t-t0.t)*e; phi=t0.p+(t1.p-t0.p)*e; radio=t0.r+(t1.r-t0.r)*e;
+      objetivo.set(t0.ox+(t1.ox-t0.ox)*e, t0.oy+(t1.oy-t0.oy)*e, t0.oz+(t1.oz-t0.oz)*e);
+      aplicarCam();
+if(k<1) requestAnimationFrame(anim);
+    })(ini);
+    marcarBoton(b.dataset.v);
+  });
+});
+
+/* ============ SELECCIÓN / FICHA ============ */
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+const ficha = document.getElementById("ficha");
+let resaltado=null;
+function limpiarResalte(){
+if(resaltado){ resaltado.traverse(o=>{ if(o.isMesh) o.material.emissive && o.material.emissive.setHex(0);}); resaltado=null;}
+}
+dom.addEventListener("click", e=>{
+if(movido) return;
+  mouse.set((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
+  ray.setFromCamera(mouse,camera);
+const hits = ray.intersectObjects(seleccionables.filter(m=>m.visible && m.parent.visible));
+  limpiarResalte();
+if(hits.length){
+const el = hits[0].object.userData.ref;
+const g = hits[0].object.parent;
+    resaltado=g;
+    g.traverse(o=>{ if(o.isMesh && o.material.emissive) o.material.emissive.setHex(0x334455);});
+const [x,y,w,d,zb,h]=el.caja;
+    ficha.style.display="block";
+    ficha.innerHTML = `<h3>${el.nombre}</h3>
+      <div class="dim">≈ ${w.toFixed(1)} × ${d.toFixed(1)} m · alto ${(zb+h).toFixed(2)} m · a ${x.toFixed(1)} m de la pared izquierda · a ${y.toFixed(1)} m del frente</div>
+      <p>${el.desc}</p>${el.prod?`<div class="prod"><div class="pt">Productos / marcas</div>${el.prod}</div>`:""}`;
+  } else { ficha.style.display="none"; }
+});
+
+/* ============ LEYENDA ============ */
+const ley = document.getElementById("leyenda");
+Object.entries(CAT).forEach(([k,v])=>{
+const d=document.createElement("div");
+  d.className="item"; d.tabIndex=0; d.setAttribute("role","switch"); d.setAttribute("aria-checked","true");
+  d.innerHTML=`<span class="sw" style="background:#${v.c.toString(16).padStart(6,"0")}"></span>${v.n}`;
+const tog=()=>{
+const off=d.classList.toggle("apagado");
+    d.setAttribute("aria-checked", String(!off));
+    (grupos[k]||[]).forEach(g=>g.visible=!off);
+  };
+  d.addEventListener("click",tog);
+  d.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();tog();}});
+  ley.appendChild(d);
+});
+
+addEventListener("resize", ()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+(function loop(){ requestAnimationFrame(loop); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
